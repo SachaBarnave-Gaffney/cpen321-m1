@@ -1,4 +1,10 @@
-# CPEN321_26W1_ProjectName
+# CPEN 321 - M1 (Sacha Barnave-Gaffney)
+
+Android app + Node/TypeScript backend for Milestone 1.
+
+- **Deployed backend:** https://8-229-164-95.sslip.io (public IP `8.229.164.95`)
+  The app in the submitted APK talks to this server; it is running and does not need to be redeployed to grade the APK.
+- **Screens:** (1) Google sign-in + server/client info, (2) live 16x16 pixel art over WebSocket, (3) countdown timer that reveals a random fact with confetti.
 
 _Keep this README up to date with the steps required to build and run the frontend and backend (including any scripts, config files, and environment variables). TAs ill follow these instructions._
 
@@ -33,7 +39,22 @@ Install the following before the frontend or backend setup steps:
    ```
    Set at least:
    - `sdk.dir`: path to your Android SDK. Android Studio usually writes this the first time you open `frontend/`. On Mac it is often `sdk.dir=/Users/<username>/Library/Android/sdk`.
-   - `API_BASE_URL`: backend URL baked into the APK. Use `http://10.0.2.2:3000` for the emulator (`10.0.2.2` is the host machine). For a physical device on the same Wi-Fi, use `http://<your-lan-ip>:3000`.
+   - `API_BASE_URL`: backend URL baked into the APK.
+     - To use the **deployed** server (recommended): `API_BASE_URL=https://8-229-164-95.sslip.io`
+     - To use a **local** backend: `http://10.0.2.2:3000` from the emulator (`10.0.2.2` is the host machine), or `http://<your-lan-ip>:3000` from a physical device.
+   - `GOOGLE_CLIENT_ID`: the **Web** OAuth client ID used by Credential Manager for Google sign-in:
+     `602415782819-gtid9l5fb5g099elbn8lf20u2at247c4.apps.googleusercontent.com`
+
+### Google sign-in notes
+
+- The emulator/device must use a **Google Play** system image and have a Google account added
+  (Settings > Passwords & accounts > Add account > Google), otherwise sign-in reports
+  "No credentials available".
+- The OAuth consent screen is in **Testing** mode, so only registered test accounts can sign in.
+  A test account for graders is listed in `M1_Doc.pdf`.
+- `frontend/app/debug.keystore` is committed on purpose so every debug build shares one SHA-1,
+  which is registered with the OAuth client. Do not replace it, or Google sign-in will fail.
+  Its password/alias are the Android defaults (`android` / `androiddebugkey`).
 
 
 ### Build and Run
@@ -64,9 +85,27 @@ cp backend/.env.example backend/.env
 ```
 
 Set at least:
-- `JWT_SECRET`: a long random string used to sign auth tokens.
-- `MONGODB_URI`: only needed for local development (default in `.env.example` assumes MongoDB on `localhost:27017`). Ignored when running via Docker Compose.
+- `MY_FIRST_NAME` / `MY_LAST_NAME`: returned by `GET /api/name`.
+- `SERVER_PUBLIC_IP`: the public IP of the machine running the backend, returned by `GET /api/ip`
+  (the deployed server uses `8.229.164.95`).
+- `PIXEL_UPSTREAM_URL` (optional): the course pixel WebSocket server. Defaults to `wss://8.229.22.124`.
 - `PORT` (optional): defaults to `3000` if unset.
+- `JWT_SECRET` / `MONGODB_URI`: unused in M1 (no database or tokens yet); leave the example values.
+
+No other secrets are required.
+
+### Backend endpoints (M1)
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /health` | `{"status":"ok"}` |
+| `GET /api/ip` | `{"serverIp","clientIp"}` - server public IP and the caller's IP |
+| `GET /api/time` | `{"serverTime"}` - server local time as `hh:mm:ss GMT+hh:mm` |
+| `GET /api/name` | `{"firstName","lastName"}` |
+| `WS /pixels` | Relays each pixel update from the course server unchanged |
+
+The server's time zone determines the GMT offset shown by `/api/time`; the deployed VM is set to
+`America/Vancouver` (`sudo timedatectl set-timezone America/Vancouver`).
 
 
 ### Option 1: Run locally
@@ -123,4 +162,22 @@ Set at least:
 
 ## Additional Setup
 
-_Please specify any other additional setup steps non-specific to either frontend nor backend_
+### How the deployed backend runs (for reference)
+
+Debian 13 VM on Google Compute Engine, `us-west1`, static IP `8.229.164.95`:
+
+1. `sudo apt install -y git caddy` and Node.js 22, plus `sudo npm install -g pm2`
+2. `git clone` this repo, then `cd backend && npm install && npm run build`
+3. Create `backend/.env` as described above
+4. `pm2 start dist/index.js --name m1 && pm2 save && pm2 startup`
+5. Caddy terminates TLS and proxies to the backend, which also upgrades the `/pixels` WebSocket:
+
+   ```
+   8-229-164-95.sslip.io {
+       reverse_proxy localhost:3000
+   }
+   ```
+
+`*.sslip.io` resolves to the IP embedded in the hostname, which lets Let's Encrypt issue a real
+certificate for the server without owning a domain, so the Android app needs no custom trust
+configuration.
