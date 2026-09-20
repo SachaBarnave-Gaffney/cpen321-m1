@@ -52,3 +52,6 @@ google-services.json
 
 # Verity — snapshots of analyzed files (machine state, never commit)
 .verity/.snapshot/
+
+# Shared debug keystore is intentionally committed so TA builds share a SHA-1
+!frontend/app/debug.keystore
